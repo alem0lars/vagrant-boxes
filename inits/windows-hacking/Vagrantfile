@@ -1,0 +1,87 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+$provision_script = <<PROVISION_SCRIPT
+
+# Enable PowerShell from local.
+Set-ExecutionPolicy -ExecutionPolicy "RemoteSigned" -Force
+# Enable remote access.
+Enable-PSRemoting -Force
+# Set timeout.
+Set-Item -Path "WSMan:\\localhost\\MaxTimeoutms" 1800000
+# Enable remote access (`AllowUnencrypt`).
+Set-Item -Path "WSMan:\\localhost\\Service\\AllowUnencrypted" -Value True
+# Enable `BASIC` Auth.
+Set-Item -Path "WSMan:\\localhost\\Service\\Auth\\Basic" -Value True
+
+# Install package manager (`ChocolateY`).
+iex ((new-object Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
+# Install PowerShell's modules manager (`PsGet`).
+iex ((new-object Net.WebClient).DownloadString('http://psget.net/GetPsGet.ps1'))
+
+# Install basic software.
+choco install mingw
+choco install git
+choco install python2
+
+# Install basic PowerShell modules.
+Install-Module PowerLS  # Get colors in your ls
+Install-Module posh-git # Provide Git/PowerShell integration.
+Install-Module pscx     # Additional stuff community have expressed interest in.
+
+# Install `Radare2`.
+git clone https://github.com/radare/radare2.git C:\\radare2
+cd C:\\radare2
+./configure --with-compiler=x86_64-w64-mingw32-gcc --with-ostype=windows --host=x86_64-unknown-windows --without-magic --without-ssl
+cd C:\\
+Add-PathVariable "C:\\radare2" -Target Machine
+
+# Install `R2-bindings`.
+git clone https://github.com/radare/radare2-bindings.git C:\\radare2-bindings
+cd C:\\radare2-bindings
+make w32
+make w32dist
+
+PROVISION_SCRIPT
+
+VAGRANTFILE_API_VERSION = '2'
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+
+  config.vm.box = 'opentable/win-8.1-core-amd64-nocm'
+
+  config.vm.box_check_update = true
+
+  config.vm.guest = :windows
+
+  config.vm.communicator = :winrm
+
+  # Vagrant will login as user `Administrator` using the password `vagrant`.
+  config.winrm.username = 'Administrator'
+  config.winrm.password = 'vagrant'
+
+  config.vm.synced_folder '.', '/vagrant_data'
+
+  # Port forward `WinRM` and `RDP`.
+  config.vm.network :forwarded_port, guest: 3389, host: 3389
+  config.vm.network :forwarded_port, guest: 5985, host: 5985, id: 'winrm',
+                    auto_correct: true
+
+  # Create a private network, which allows host-only access to the machine
+  # using a specific IP.
+  config.vm.network :private_network, ip: '10.0.20.101'
+
+  # Ensure that all networks are set to private.
+  config.windows.set_work_network = true
+
+  config.vm.provider 'virtualbox' do |vb|
+    # Don't boot with headless mode.
+    vb.gui = true
+    # Use `VBoxManage` to customize the VM.
+    vb.customize ['modifyvm', :id, '--memory', '2048']
+    vb.customize ['modifyvm', :id, '--cpus',   '2']
+  end
+
+  config.vm.provision "shell", inline: $provision_script
+
+end
