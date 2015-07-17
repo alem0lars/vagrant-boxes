@@ -4,30 +4,41 @@
 $provision_script = <<PROVISION_SCRIPT
 
 # Enable PowerShell from local.
-Set-ExecutionPolicy -ExecutionPolicy "RemoteSigned" -Force
+Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Force
 # Enable remote access.
 Enable-PSRemoting -Force
 # Set timeout.
-Set-Item -Path "WSMan:\\localhost\\MaxTimeoutms" 1800000
+Set-Item WSMan:\\localhost\\MaxTimeoutms 1800000
 # Enable remote access (`AllowUnencrypt`).
-Set-Item -Path "WSMan:\\localhost\\Service\\AllowUnencrypted" -Value True
+Set-Item WSMan:\\localhost\\Service\\AllowUnencrypted -Value True
 # Enable `BASIC` Auth.
-Set-Item -Path "WSMan:\\localhost\\Service\\Auth\\Basic" -Value True
+Set-Item WSMan:\\localhost\\Service\\Auth\\Basic -Value True
+
+# Allow untrusted certificates.
+[System.Net.ServicePointManager]::ServiceCertificateValidationCallback = {$true}
 
 # Install package manager (`ChocolateY`).
-iex ((new-object Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
+iex ((New-Object Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
 # Install PowerShell's modules manager (`PsGet`).
-iex ((new-object Net.WebClient).DownloadString('http://psget.net/GetPsGet.ps1'))
+iex ((New-Object Net.WebClient).DownloadString('http://psget.net/GetPsGet.ps1'))
+Import-Module PsGet
+Install-Module PsUrl
+
+. $PROFILE
 
 # Install basic software.
-choco install mingw
-choco install git
-choco install python2
+choco install -y 7zip
+choco install -y 7zip.commandline
+choco install -y git
+choco install -y python2
+choco install -y mingw
 
 # Install basic PowerShell modules.
 Install-Module PowerLS  # Get colors in your ls
 Install-Module posh-git # Provide Git/PowerShell integration.
 Install-Module pscx     # Additional stuff community have expressed interest in.
+
+. $PROFILE
 
 # Install `Radare2`.
 git clone https://github.com/radare/radare2.git C:\\radare2
@@ -50,11 +61,9 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
   config.vm.box = 'opentable/win-8.1-core-amd64-nocm'
 
-  config.vm.box_check_update = true
-
   config.vm.guest = :windows
 
-  config.vm.communicator = :winrm
+  # config.vm.communicator = :winrm
 
   # Vagrant will login as user `Administrator` using the password `vagrant`.
   config.winrm.username = 'Administrator'
@@ -64,8 +73,8 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
   # Port forward `WinRM` and `RDP`.
   config.vm.network :forwarded_port, guest: 3389, host: 3389
-  config.vm.network :forwarded_port, guest: 5985, host: 5985, id: 'winrm',
-                    auto_correct: true
+  # config.vm.network :forwarded_port, guest: 5985, host: 5985, id: 'winrm',
+  #                   auto_correct: true
 
   # Create a private network, which allows host-only access to the machine
   # using a specific IP.
